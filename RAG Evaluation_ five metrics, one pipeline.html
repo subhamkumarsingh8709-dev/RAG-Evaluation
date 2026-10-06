@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RAG Evaluation: five metrics, one pipeline</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#f3f5ff;--card:rgba(255,255,255,.72);--ink:#0b1030;--mut:#55608a;--line:rgba(80,90,200,.22);--ret:#5b5bff;--gen:#00a88f;--bad:#e0307a;--ok:#00a88f;--glow:.25;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#060818;--card:rgba(20,26,60,.6);--ink:#eaf0ff;--mut:#9aa8d6;--line:rgba(130,150,255,.25);--ret:#8b8bff;--gen:#2ef2d0;--bad:#ff5c9d;--ok:#2ef2d0;--glow:.55}}
+:root[data-theme="dark"]{--bg:#060818;--card:rgba(20,26,60,.6);--ink:#eaf0ff;--mut:#9aa8d6;--line:rgba(130,150,255,.25);--ret:#8b8bff;--gen:#2ef2d0;--bad:#ff5c9d;--ok:#2ef2d0;--glow:.55}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:hidden;position:relative;min-height:100vh}
+body::before,body::after{content:"";position:fixed;z-index:-1;width:60vmax;height:60vmax;border-radius:50%;filter:blur(90px);opacity:var(--glow);animation:drift 18s ease-in-out infinite alternate}
+body::before{background:var(--ret);top:-25vmax;left:-15vmax}
+body::after{background:var(--gen);bottom:-30vmax;right:-20vmax;animation-delay:-9s}
+@keyframes drift{to{transform:translate(12vmax,8vmax) scale(1.2)}}
+.grid{position:fixed;inset:0;z-index:-1;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;opacity:.35;mask-image:radial-gradient(circle at 50% 30%,#000,transparent 75%);-webkit-mask-image:radial-gradient(circle at 50% 30%,#000,transparent 75%)}
+main{max-width:880px;margin:0 auto;padding:40px 20px 60px}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border:1px solid var(--line);border-radius:99px;background:var(--card);backdrop-filter:blur(10px);font-size:13px;color:var(--mut);margin-bottom:18px}
+.badge i{width:8px;height:8px;border-radius:50%;background:var(--gen);box-shadow:0 0 10px var(--gen);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.3;transform:scale(.7)}}
+h1{font:700 clamp(36px,7vw,60px)/1.05 "Space Grotesk",Inter,sans-serif;margin:0 0 12px;letter-spacing:-.03em;background:linear-gradient(90deg,var(--ret),var(--gen),var(--ret));background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+@keyframes shine{to{background-position:200% center}}
+.lead{color:var(--mut);max-width:60ch;margin:0 0 28px}
+.pipe{display:flex;align-items:center;gap:8px;overflow-x:auto;padding:10px 6px 16px}
+.st{flex:0 0 auto;padding:10px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card);backdrop-filter:blur(10px);font-weight:600;transition:.3s}
+.st.on{border-color:var(--c);color:var(--c);box-shadow:0 0 22px color-mix(in srgb,var(--c) 55%,transparent),inset 0 0 12px color-mix(in srgb,var(--c) 18%,transparent);transform:translateY(-3px)}
+.ar{flex:0 0 28px;height:2px;background:linear-gradient(90deg,transparent,var(--ret),transparent);background-size:200% 100%;animation:flow 1.4s linear infinite}
+@keyframes flow{from{background-position:200% 0}to{background-position:-200% 0}}
+.grp{display:flex;gap:18px;font-size:14px;color:var(--mut);margin:0 0 20px;flex-wrap:wrap}
+.grp b{color:var(--c)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tab{font:600 15px Inter,sans-serif;padding:9px 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);backdrop-filter:blur(10px);color:var(--ink);cursor:pointer;transition:.25s}
+.tab:hover{border-color:var(--c)}
+.tab[aria-selected="true"]{background:var(--c);border-color:var(--c);color:#050816;box-shadow:0 0 20px color-mix(in srgb,var(--c) 60%,transparent)}
+.tab:focus-visible,.it:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.panel{background:var(--card);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:20px;padding:26px;position:relative;overflow:hidden;animation:rise .5s ease}
+.panel::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,var(--c),transparent);background-size:200% 100%;animation:flow 3s linear infinite}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+h2{font:700 30px "Space Grotesk",Inter,sans-serif;margin:0 0 4px;color:var(--c)}
+.q{margin:0 0 6px;font-weight:500}
+.hint{color:var(--mut);font-size:14px;margin:0 0 16px}
+.items{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:22px}
+.it{font:500 15px Inter,sans-serif;text-align:left;padding:12px 14px;border-radius:12px;border:1px solid var(--bad);background:color-mix(in srgb,var(--bad) 8%,transparent);color:var(--ink);cursor:pointer;transition:.2s}
+.it:hover{transform:translateY(-2px)}
+.it.y{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent);box-shadow:0 0 16px color-mix(in srgb,var(--ok) 30%,transparent)}
+.it small{display:block;font-weight:600;margin-top:4px;color:var(--bad)}
+.it.y small{color:var(--ok)}
+.score{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.num{font:700 62px/1 "Space Grotesk",Inter,sans-serif;color:var(--c);text-shadow:0 0 28px color-mix(in srgb,var(--c) 60%,transparent)}
+.f{color:var(--mut);font-size:15px}
+.track{height:12px;border-radius:99px;background:var(--line);margin-top:14px;overflow:hidden}
+.fill{height:100%;background:linear-gradient(90deg,var(--c),color-mix(in srgb,var(--c) 40%,#fff));border-radius:99px;transition:width .6s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 14px var(--c)}
+.fix{margin:16px 0 0;font-size:14px;color:var(--mut)}
+.sum{margin-top:30px;display:grid;gap:8px}
+.sum div{display:flex;gap:12px;padding:12px 14px;border:1px solid var(--line);border-left:4px solid var(--c);background:var(--card);backdrop-filter:blur(10px);border-radius:0 12px 12px 0}
+.sum b{min-width:110px;color:var(--c)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="grid"></div>
+<main>
+<span class="badge"><i></i>Live RAG evaluation playground</span>
+<h1>How good is your RAG pipeline?</h1>
+<p class="lead">A RAG system retrieves context, then generates an answer. Five metrics check each step. Pick a metric, then click the items to see how the score changes.</p>
+<div class="pipe" id="pipe" aria-hidden="true"></div>
+<div class="grp"><span style="--c:var(--ret)"><b>Retrieval metrics:</b> Precision, Recall</span><span style="--c:var(--gen)"><b>Generation metrics:</b> Faithfulness, Relevancy, Correctness</span></div>
+<div class="tabs" role="tablist" id="tabs"></div>
+<section class="panel" id="panel" aria-live="polite"></section>
+<div class="sum" id="sum"></div>
+</main>
+<script>
+const R="var(--ret)",G="var(--gen)";
+const M=[
+{n:"Precision",c:R,st:[1,2],q:"Is what I retrieved actually useful?",hint:"Click a chunk to mark it relevant or noise.",tag:["noise","relevant"],f:"relevant retrieved ÷ total retrieved",items:["Chunk 1","Chunk 2","Chunk 3","Chunk 4","Chunk 5"],v:[1,1,0,1,0],s:"Retrieved chunks that are relevant"},
+{n:"Recall",c:R,st:[1,2],q:"Did I find everything that was needed?",hint:"Click a document to mark it retrieved or missed.",tag:["missed","retrieved"],f:"relevant retrieved ÷ all relevant",items:["Doc 1","Doc 2","Doc 3","Doc 4"],v:[1,1,1,0],s:"Relevant documents that were found"},
+{n:"Faithfulness",c:G,st:[3],q:"Is every claim in the answer backed by the context?",hint:"Click a claim to mark it supported or hallucinated.",tag:["hallucinated","supported"],f:"supported claims ÷ total claims",items:["Paris is the capital of France","Paris sits on the Seine","About 2.1M people live in the city","The Eiffel Tower is 500 m tall"],v:[1,1,1,0],s:"Claims supported by the context"},
+{n:"Relevancy",c:G,st:[3,4],q:"Does the answer address the question: What is RAG?",hint:"Click a sentence to mark it on topic or off topic.",tag:["off topic","on topic"],f:"on-topic sentences ÷ all sentences",items:["RAG pairs a retriever with an LLM","It grounds answers in your documents","Python was released in 1991"],v:[1,1,0],s:"Answer addresses the question"},
+{n:"Correctness",c:G,st:[4],q:"Does the answer match the ground truth: Paris is the capital of France?",hint:"Click a fact to mark it matched or wrong.",tag:["wrong","matched"],f:"matched facts ÷ ground-truth facts",items:["The city is Paris","It is the capital","The country is France","Population is 2.1M"],v:[1,1,1,0],s:"Answer matches the ground truth"}
+];
+const S=["Question","Retriever","Context","LLM","Answer"];
+const pipe=document.getElementById("pipe"),tabs=document.getElementById("tabs"),panel=document.getElementById("panel");
+pipe.innerHTML=S.map((s,i)=>`<span class="st" id="s${i}">${s}</span>${i<4?'<span class="ar">→</span>':""}`).join("");
+document.getElementById("sum").innerHTML=M.map(m=>`<div style="--c:${m.c}"><b>${m.n}</b><span>${m.s}</span></div>`).join("");
+let cur=0,prev=0;const state=M.map(m=>m.v.slice());
+function show(i){
+ cur=i;const m=M[i];
+ document.querySelectorAll(".tab").forEach((t,j)=>t.setAttribute("aria-selected",j==i));
+ S.forEach((_,j)=>{const e=document.getElementById("s"+j);e.classList.toggle("on",m.st.includes(j)||j==(m.c==R?2:4)&&false);e.style.setProperty("--c",m.c)});
+ const st=state[i],sc=st.reduce((a,b)=>a+b,0);
+ panel.style.setProperty("--c",m.c);
+ panel.innerHTML=`<h2>${m.n}</h2><p class="q">${m.q}</p><p class="hint">${m.hint}</p>
+ <div class="items">${m.items.map((t,k)=>`<button class="it ${st[k]?"y":""}" data-k="${k}" aria-pressed="${!!st[k]}">${t}<small>${m.tag[st[k]]}</small></button>`).join("")}</div>
+ <div class="score"><span class="num">${(sc/st.length).toFixed(2)}</span><span class="f">${m.n} = ${m.f} = ${sc} ÷ ${st.length}</span></div>
+ <div class="track"><div class="fill" style="width:${sc/st.length*100}%"></div></div>
+ <p class="fix">${sc/st.length<1?"Below 1.00 means something to fix.":"A perfect score. Try marking an item the other way."}</p>`;
+ const nm=panel.querySelector(".num"),tg=sc/st.length,t0=performance.now();
+ (function tick(t){const p=Math.min((t-t0)/500,1);nm.textContent=(prev+(tg-prev)*p).toFixed(2);if(p<1)requestAnimationFrame(tick);else prev=tg})(t0);
+ panel.querySelectorAll(".it").forEach(b=>b.onclick=()=>{state[cur][b.dataset.k]^=1;show(cur);panel.querySelector(`[data-k="${b.dataset.k}"]`).focus()});
+}
+M.forEach((m,i)=>{const b=document.createElement("button");b.className="tab";b.role="tab";b.textContent=m.n;b.style.setProperty("--c",m.c);b.onclick=()=>show(i);tabs.appendChild(b)});
+show(0);
+</script>
+</body>
+</html>
